@@ -1,4 +1,5 @@
 netifaces
+phonenumbers
 pycryptodomex
 pyperclip
 Requests

@@ -6,32 +6,40 @@
 # https://github.com/t3l3machus/Villain
 
 import os
+import threading
 from .common import system_type
+from .concurrency_and_recon import ImplantLoggerController
 from .settings import Logging_Settings
 
 main_meta_folder = Logging_Settings.main_meta_folder_unix if system_type in ['Linux', 'Darwin'] else Logging_Settings.main_meta_folder_windows
+
+# Initialize the threading controller for implant logging
+_implant_logger_controller = ImplantLoggerController()
+_file_lock = threading.Lock()
 
 
 class HoaxShell_Implants_Logger:
 
     generated_implants_file = f'{main_meta_folder}/hoaxshell_generated_implants.txt'
-    generated_implants_file_open = False
+    generated_implants_file_open = False  # Keep for backward compatibility
 
 
     @staticmethod
     def store_session_details(id, session_meta):
 
         try:
-
-            while HoaxShell_Implants_Logger.generated_implants_file_open:
-                pass
-
-            else:
-                HoaxShell_Implants_Logger.generated_implants_file_open = True
-                hoaxshell_generated_implants = open(HoaxShell_Implants_Logger.generated_implants_file, 'a')
-                hoaxshell_generated_implants.write(f'"{id}" : {str(session_meta)}' + ',\n')
-                hoaxshell_generated_implants.close()
-                HoaxShell_Implants_Logger.generated_implants_file_open = False
+            # Use proper threading instead of busy-wait
+            _implant_logger_controller.set_open()
+            try:
+                # Use file lock for thread safety
+                with _file_lock:
+                    with open(HoaxShell_Implants_Logger.generated_implants_file, 'a') as hoaxshell_generated_implants:
+                        hoaxshell_generated_implants.write(f'"{id}" : {str(session_meta)}' + ',\n')
+                    
+                    # Update backward compatibility flag
+                    HoaxShell_Implants_Logger.generated_implants_file_open = False
+            finally:
+                _implant_logger_controller.set_closed()
 
         except:
             pass
@@ -44,15 +52,15 @@ class HoaxShell_Implants_Logger:
         if os.path.exists(HoaxShell_Implants_Logger.generated_implants_file):
 
             try:
-
-                while HoaxShell_Implants_Logger.generated_implants_file_open:
-                    pass
-
-                else:
-                    HoaxShell_Implants_Logger.generated_implants_file_open = True
-                    hoaxshell_generated_implants = open(HoaxShell_Implants_Logger.generated_implants_file, 'r')
-                    session_data = hoaxshell_generated_implants.read()
-                    hoaxshell_generated_implants.close()
+                # Wait for any ongoing write operations to complete (with timeout)
+                _implant_logger_controller.wait_until_closed(timeout=5.0)
+                
+                # Use file lock for thread safety
+                with _file_lock:
+                    with open(HoaxShell_Implants_Logger.generated_implants_file, 'r') as hoaxshell_generated_implants:
+                        session_data = hoaxshell_generated_implants.read()
+                    
+                    # Update backward compatibility flag
                     HoaxShell_Implants_Logger.generated_implants_file_open = False
                     return '{' + session_data.strip(',\n') + '}'
 
